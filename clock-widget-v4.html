@@ -1,0 +1,471 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Clock Widget</title>
+<style>
+  :root{
+    --card: #1c1c1c;
+    --card-top: #232323;
+    --card-bottom: #161616;
+    --digit: #e8e4dc;
+    --page: #d9d9d9;
+    --ink: #4a4a4a;
+    --ink-soft: #8a8a8a;
+    --seg-off: rgba(232,228,220,0.08);
+    --font-ui: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    --font-display: 'Arial Black', 'Helvetica Neue', Arial, sans-serif;
+  }
+  *{ box-sizing:border-box; margin:0; padding:0; }
+  html,body{ background:transparent; width:100%; height:100%; font-family:var(--font-ui); overflow:hidden; }
+
+  .widget{
+    width:100%; height:100%; min-height:230px;
+    background: var(--page);
+    border-radius:18px;
+    display:flex; flex-direction:column;
+    align-items:center; justify-content:center;
+    position:relative;
+    padding:28px 20px;
+    gap:14px;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+    container-type: inline-size;
+  }
+
+  /* ===== FLIP ===== */
+  .flip-row{ display:flex; gap: clamp(8px,2.5vw,14px); align-items:center; }
+  .mode-digital .flip-row, .mode-analog .flip-row{ display:none; }
+  .colon{
+    font-size: clamp(2rem, 8vw, 3.2rem);
+    color: var(--ink-soft);
+    font-weight:700;
+    line-height:1;
+  }
+  .flip-unit{
+    position:relative;
+    width: clamp(70px, 19vw, 108px);
+    height: clamp(96px, 25vw, 148px);
+    border-radius:12px;
+    box-shadow: 0 6px 16px rgba(0,0,0,0.25);
+  }
+  .flip-unit.hidden-unit{ display:none; }
+  .card-top, .card-bottom{
+    position:absolute; left:0; width:100%; height:50%; overflow:hidden;
+  }
+  .card-top{
+    top:0; border-radius:12px 12px 0 0;
+    background: var(--card-top);
+  }
+  .card-bottom{
+    bottom:0; border-radius:0 0 12px 12px;
+    background: var(--card-bottom);
+  }
+  .card-top .digit, .card-bottom .digit{
+    position:absolute; width:100%; height:200%;
+    display:flex; align-items:center; justify-content:center;
+    font-family: var(--font-display);
+    font-size: clamp(2.9rem, 11vw, 4.6rem);
+    font-weight:900; color: var(--digit);
+    font-variant-numeric: tabular-nums;
+    letter-spacing:-0.02em;
+  }
+  .card-bottom .digit{ top:-100%; }
+  .flip-unit::after{
+    content:''; position:absolute; top:50%; left:0; right:0; height:1px;
+    background: rgba(0,0,0,0.12); z-index:5;
+  }
+
+  .weekday{
+    font-size: var(--label-size, 1.05rem);
+    letter-spacing:0.14em;
+    text-transform:uppercase;
+    color: var(--label-color, var(--ink));
+    font-weight:800;
+  }
+  .date-sub{
+    font-size: calc(var(--label-size, 1.05rem) * 0.78);
+    color: var(--label-color, var(--ink-soft));
+    letter-spacing:0.05em;
+    opacity:0.8;
+  }
+
+  /* ===== DIGITAL (block segments) ===== */
+  .digital-wrap{ display:none; align-items:center; gap: clamp(5px,1.8vw,11px); }
+  .mode-digital .digital-wrap{ display:flex; }
+  .seg-digit{
+    position:relative;
+    width: clamp(30px, 8vw, 46px);
+    height: clamp(52px, 14vw, 80px);
+  }
+  .seg{
+    position:absolute;
+    background: var(--seg-off);
+    border-radius:3px;
+    transition: background 0.15s;
+  }
+  .seg.on{ background: var(--digit); box-shadow: 0 0 6px rgba(0,0,0,0.15); }
+  .seg-a{ top:0%;    left:16%; width:68%; height:9%; }
+  .seg-f{ top:7%;    left:0%;  width:13%; height:39%; }
+  .seg-b{ top:7%;    right:0%; width:13%; height:39%; }
+  .seg-g{ top:45.5%; left:16%; width:68%; height:9%; }
+  .seg-e{ top:54%;   left:0%;  width:13%; height:39%; }
+  .seg-c{ top:54%;   right:0%; width:13%; height:39%; }
+  .seg-d{ top:91%;   left:16%; width:68%; height:9%; }
+
+  .seg-colon{ display:flex; flex-direction:column; gap: clamp(8px,3vw,14px); padding:0 1px; }
+  .seg-colon .dot{
+    width: clamp(6px,1.8vw,9px); height: clamp(6px,1.8vw,9px);
+    background: var(--digit); border-radius:50%;
+  }
+
+  /* ===== ANALOG ===== */
+  .analog-wrap{ display:none; }
+  .mode-analog .analog-wrap{ display:block; }
+  .clock-face{ width: clamp(120px, 36vw, 170px); height: clamp(120px, 36vw, 170px); }
+
+  /* ===== controls ===== */
+  .style-switch{
+    position:absolute; top:10px; left:10px;
+    display:flex; gap:4px;
+    background: rgba(0,0,0,0.08);
+    border-radius:20px;
+    padding:3px;
+  }
+  .style-switch button{
+    border:none; background:transparent; color: var(--ink-soft);
+    font-size:0.62rem; padding:5px 9px; border-radius:16px; cursor:pointer;
+    letter-spacing:0.04em; text-transform:uppercase; font-weight:700;
+    font-family: var(--font-ui);
+  }
+  .style-switch button.active{ background: var(--card); color: var(--digit); }
+
+  .settings-btn{
+    position:absolute; top:9px; right:9px; width:24px; height:24px;
+    display:flex; align-items:center; justify-content:center;
+    color: var(--ink-soft); cursor:pointer; border-radius:50%;
+  }
+  .settings-btn:hover{ background: rgba(0,0,0,0.08); }
+  .settings-btn svg{ width:14px; height:14px; }
+
+  .panel{
+    position:absolute; inset:0; background: var(--page); border-radius:18px;
+    display:none; flex-direction:column; padding:18px; gap:9px; overflow-y:auto;
+  }
+  .panel.open{ display:flex; }
+  .panel h4{ font-size:0.68rem; letter-spacing:0.1em; text-transform:uppercase; color: var(--ink); font-weight:700; margin-top:4px; }
+  .panel select, .panel input[type=color]{
+    width:100%; background: #fff; border:1px solid rgba(0,0,0,0.12);
+    color: var(--ink); padding:8px 10px; border-radius:7px; font-size:0.8rem;
+  }
+  .row{ display:flex; gap:8px; align-items:center; }
+  .row label{ font-size:0.72rem; color: var(--ink); flex:1; }
+  .color-row{ display:flex; gap:8px; }
+  .color-row > div{ flex:1; }
+  .color-row label{ display:block; font-size:0.66rem; color: var(--ink-soft); margin-bottom:3px; }
+  .close-btn{
+    margin-top:auto; align-self:flex-end; background: var(--card); color: var(--digit);
+    border:none; padding:7px 16px; border-radius:7px; font-size:0.76rem; font-weight:700; cursor:pointer;
+  }
+</style>
+</head>
+<body>
+
+<div class="widget mode-flip" id="widget">
+
+  <div class="style-switch">
+    <button data-style="flip" class="active">Flip</button>
+    <button data-style="digital">Digital</button>
+    <button data-style="analog">Analog</button>
+  </div>
+
+  <div class="flip-row" id="flipRow"></div>
+
+  <div class="digital-wrap" id="digitalWrap"></div>
+
+  <div class="analog-wrap">
+    <svg class="clock-face" id="clockFace" viewBox="0 0 200 200">
+      <circle cx="100" cy="100" r="96" fill="none" stroke="var(--card)" stroke-width="2.5" opacity="0.6"/>
+      <g id="ticks"></g>
+      <line id="hourHand" x1="100" y1="100" x2="100" y2="60" stroke="var(--ink)" stroke-width="6" stroke-linecap="round"/>
+      <line id="minHand" x1="100" y1="100" x2="100" y2="38" stroke="var(--ink)" stroke-width="4" stroke-linecap="round"/>
+      <line id="secHand" x1="100" y1="100" x2="100" y2="28" stroke="var(--card)" stroke-width="1.5" stroke-linecap="round"/>
+      <circle cx="100" cy="100" r="4.5" fill="var(--card)"/>
+    </svg>
+  </div>
+
+  <div class="weekday" id="weekday">---</div>
+  <div class="date-sub" id="dateSub">-- --- ----</div>
+
+  <div class="settings-btn" id="settingsBtn">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+  </div>
+
+  <div class="panel" id="panel">
+    <h4>Time zone</h4>
+    <select id="tzSelect"></select>
+    <h4>Format</h4>
+    <div class="row"><label>24-hour</label><input type="checkbox" id="format24" checked></div>
+    <div class="row"><label>Show seconds</label><input type="checkbox" id="showSec" checked></div>
+    <div class="row"><label>Show weekday</label><input type="checkbox" id="showWeekday" checked></div>
+    <div class="row"><label>Show date</label><input type="checkbox" id="showDate" checked></div>
+    <h4>Colors</h4>
+    <div class="color-row">
+      <div><label>Clock color</label><input type="color" id="cardColor" value="#1c1c1c"></div>
+      <div><label>Digit color</label><input type="color" id="digitColor" value="#e8e4dc"></div>
+    </div>
+    <h4>Weekday &amp; date</h4>
+    <select id="labelSize">
+      <option value="0.8rem">Small</option>
+      <option value="1.05rem" selected>Medium</option>
+      <option value="1.4rem">Large</option>
+      <option value="1.8rem">Extra Large</option>
+    </select>
+    <div class="color-row">
+      <div><label>Text color</label><input type="color" id="labelColor" value="#4a4a4a"></div>
+    </div>
+    <button class="close-btn" id="closeBtn">Done</button>
+  </div>
+</div>
+
+<script>
+(function(){
+  const widget = document.getElementById('widget');
+  const flipRow = document.getElementById('flipRow');
+  const digitalWrap = document.getElementById('digitalWrap');
+  const weekdayEl = document.getElementById('weekday');
+  const dateSubEl = document.getElementById('dateSub');
+  const panel = document.getElementById('panel');
+  const settingsBtn = document.getElementById('settingsBtn');
+  const closeBtn = document.getElementById('closeBtn');
+  const tzSelect = document.getElementById('tzSelect');
+  const format24 = document.getElementById('format24');
+  const showSec = document.getElementById('showSec');
+  const showWeekday = document.getElementById('showWeekday');
+  const showDate = document.getElementById('showDate');
+  const cardColor = document.getElementById('cardColor');
+  const digitColor = document.getElementById('digitColor');
+  const labelSize = document.getElementById('labelSize');
+  const labelColor = document.getElementById('labelColor');
+  const styleButtons = document.querySelectorAll('.style-switch button');
+  const hourHand = document.getElementById('hourHand');
+  const minHand = document.getElementById('minHand');
+  const secHand = document.getElementById('secHand');
+  const ticksG = document.getElementById('ticks');
+
+  const STORAGE_KEY = 'clockWidgetPrefsV7';
+  let prefs = JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}');
+  prefs.style = prefs.style || 'flip';
+
+  // ---- flip units ----
+  const flipUnits = [];
+  const flipColons = [];
+  function buildFlip(){
+    flipRow.innerHTML = '';
+    flipUnits.length = 0; flipColons.length = 0;
+    const layout = ['h1','h2','colon','m1','m2','colon2','s1','s2'];
+    layout.forEach(type=>{
+      if(type==='colon' || type==='colon2'){
+        const c = document.createElement('div'); c.className='colon'; c.textContent=':';
+        flipRow.appendChild(c);
+        if(type==='colon2') flipColons.push(c);
+      } else {
+        const u = document.createElement('div'); u.className='flip-unit';
+        u.innerHTML = `<div class="card-top"><div class="digit">0</div></div><div class="card-bottom"><div class="digit">0</div></div>`;
+        flipRow.appendChild(u);
+        flipUnits.push({el:u, current:'', type});
+      }
+    });
+    updateSecondsVisibility();
+  }
+  function setFlipDigit(unit, value){
+    if(unit.current === value) return;
+    unit.current = value;
+    unit.el.querySelectorAll('.digit').forEach(d=> d.textContent = value);
+    unit.el.animate([{transform:'scaleY(1)'},{transform:'scaleY(0.88)'},{transform:'scaleY(1)'}], {duration:240, easing:'ease-out'});
+  }
+  function updateSecondsVisibility(){
+    const show = showSec.checked;
+    flipUnits.forEach(u=>{
+      if(u.type === 's1' || u.type === 's2') u.el.classList.toggle('hidden-unit', !show);
+    });
+    flipColons.forEach(c=> c.style.display = show ? '' : 'none');
+  }
+
+  // ---- digital block segments ----
+  const SEGMENTS = {
+    '0':['a','b','c','d','e','f'], '1':['b','c'], '2':['a','b','g','e','d'],
+    '3':['a','b','g','c','d'], '4':['f','g','b','c'], '5':['a','f','g','c','d'],
+    '6':['a','f','g','e','c','d'], '7':['a','b','c'], '8':['a','b','c','d','e','f','g'],
+    '9':['a','b','c','d','f','g']
+  };
+  const digitEls = [];
+  const digitalColons = [];
+  function buildDigital(){
+    digitalWrap.innerHTML = '';
+    digitEls.length = 0; digitalColons.length = 0;
+    const layout = ['h1','h2','colon','m1','m2','colon2','s1','s2'];
+    layout.forEach(type=>{
+      if(type==='colon' || type==='colon2'){
+        const c = document.createElement('div'); c.className='seg-colon';
+        c.innerHTML = '<div class="dot"></div><div class="dot"></div>';
+        digitalWrap.appendChild(c);
+        if(type==='colon2') digitalColons.push(c);
+      } else {
+        const wrap = document.createElement('div'); wrap.className='seg-digit';
+        const segs = {};
+        ['a','b','c','d','e','f','g'].forEach(k=>{
+          const s = document.createElement('div'); s.className = 'seg seg-'+k;
+          wrap.appendChild(s); segs[k] = s;
+        });
+        digitalWrap.appendChild(wrap);
+        digitEls.push({wrap, segs, type});
+      }
+    });
+  }
+  function setDigitalValue(entry, value){
+    const on = new Set(SEGMENTS[value] || []);
+    Object.keys(entry.segs).forEach(k=>{
+      entry.segs[k].classList.toggle('on', on.has(k));
+    });
+  }
+  function updateDigitalSecondsVisibility(){
+    const show = showSec.checked;
+    digitEls.forEach(d=>{
+      if(d.type==='s1' || d.type==='s2') d.wrap.style.display = show ? '' : 'none';
+    });
+    digitalColons.forEach(c=> c.style.display = show ? '' : 'none');
+  }
+
+  // ---- analog ticks ----
+  for(let i=0;i<12;i++){
+    const angle = (i*30) * Math.PI/180;
+    const x1 = 100 + 84*Math.sin(angle), y1 = 100 - 84*Math.cos(angle);
+    const x2 = 100 + 92*Math.sin(angle), y2 = 100 - 92*Math.cos(angle);
+    const line = document.createElementNS('http://www.w3.org/2000/svg','line');
+    line.setAttribute('x1',x1); line.setAttribute('y1',y1);
+    line.setAttribute('x2',x2); line.setAttribute('y2',y2);
+    line.setAttribute('stroke','rgba(0,0,0,0.25)');
+    line.setAttribute('stroke-width', i%3===0 ? 3 : 1.5);
+    ticksG.appendChild(line);
+  }
+
+  const timezones = Intl.supportedValuesOf ? Intl.supportedValuesOf('timeZone') : ['Europe/Kyiv','Europe/London','America/New_York','Asia/Tokyo'];
+  timezones.forEach(tz=>{
+    const opt = document.createElement('option'); opt.value = tz; opt.textContent = tz.replace('_',' ');
+    tzSelect.appendChild(opt);
+  });
+
+  function shade(hex, percent){
+    const h = hex.replace('#','');
+    const r = parseInt(h.substring(0,2),16), g = parseInt(h.substring(2,4),16), b = parseInt(h.substring(4,6),16);
+    const nr = percent>0 ? r+(255-r)*percent : r*(1+percent);
+    const ng = percent>0 ? g+(255-g)*percent : g*(1+percent);
+    const nb = percent>0 ? b+(255-b)*percent : b*(1+percent);
+    return '#' + [nr,ng,nb].map(v=> Math.max(0,Math.min(255,Math.round(v))).toString(16).padStart(2,'0')).join('');
+  }
+  function hexToRgba(hex, alpha){
+    const h = hex.replace('#','');
+    const r = parseInt(h.substring(0,2),16), g = parseInt(h.substring(2,4),16), b = parseInt(h.substring(4,6),16);
+    return `rgba(${r},${g},${b},${alpha})`;
+  }
+
+  function applyCardColor(hex){
+    widget.style.setProperty('--card', hex);
+    widget.style.setProperty('--card-top', shade(hex, 0.025));
+    widget.style.setProperty('--card-bottom', shade(hex, -0.03));
+    cardColor.value = hex;
+  }
+  function applyDigitColor(hex){
+    widget.style.setProperty('--digit', hex);
+    // barely-there off segments: very low opacity of the digit color against the card
+    widget.style.setProperty('--seg-off', hexToRgba(hex, 0.07));
+    digitColor.value = hex;
+  }
+
+  function applyStyleMode(){
+    widget.className = 'widget mode-' + prefs.style;
+    styleButtons.forEach(b=> b.classList.toggle('active', b.dataset.style === prefs.style));
+  }
+  function save(){ localStorage.setItem(STORAGE_KEY, JSON.stringify(prefs)); }
+
+  async function detectTimezone(){
+    if(prefs.tz){ tzSelect.value = prefs.tz; return; }
+    try{
+      const res = await fetch('https://ipapi.co/json/');
+      const data = await res.json();
+      const tz = data.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone;
+      prefs.tz = tz; tzSelect.value = tz; save();
+    }catch(e){
+      const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+      prefs.tz = tz; tzSelect.value = tz;
+    }
+  }
+
+  function tick(){
+    const tz = prefs.tz || Intl.DateTimeFormat().resolvedOptions().timeZone;
+    const now = new Date();
+    const opts = { timeZone: tz, hour12:false, hour:'2-digit', minute:'2-digit', second:'2-digit' };
+    const parts = new Intl.DateTimeFormat('en-GB', opts).formatToParts(now);
+    let h='00',m='00',s='00';
+    parts.forEach(p=>{ if(p.type==='hour') h=p.value; if(p.type==='minute') m=p.value; if(p.type==='second') s=p.value; });
+    let H = parseInt(h);
+    let dispH = H;
+    if(!format24.checked){ dispH = H%12; if(dispH===0) dispH=12; }
+    const hStr = String(dispH).padStart(2,'0');
+
+    const vals = { h1:hStr[0], h2:hStr[1], m1:m[0], m2:m[1], s1:s[0], s2:s[1] };
+    flipUnits.forEach(u=> setFlipDigit(u, vals[u.type]));
+    digitEls.forEach(d=> setDigitalValue(d, vals[d.type]));
+
+    const M = parseInt(m), S = parseInt(s);
+    hourHand.setAttribute('transform', `rotate(${(H%12+M/60)*30} 100 100)`);
+    minHand.setAttribute('transform', `rotate(${(M+S/60)*6} 100 100)`);
+    secHand.setAttribute('transform', `rotate(${S*6} 100 100)`);
+
+    weekdayEl.textContent = new Intl.DateTimeFormat('en-US', { timeZone: tz, weekday:'long' }).format(now);
+    weekdayEl.style.display = showWeekday.checked ? '' : 'none';
+    dateSubEl.textContent = new Intl.DateTimeFormat('en-US', { timeZone: tz, day:'numeric', month:'long', year:'numeric' }).format(now);
+    dateSubEl.style.display = showDate.checked ? '' : 'none';
+  }
+
+  settingsBtn.addEventListener('click', ()=> panel.classList.add('open'));
+  closeBtn.addEventListener('click', ()=> panel.classList.remove('open'));
+  styleButtons.forEach(btn=>{
+    btn.addEventListener('click', ()=>{ prefs.style = btn.dataset.style; applyStyleMode(); save(); });
+  });
+  tzSelect.addEventListener('change', ()=>{ prefs.tz = tzSelect.value; save(); tick(); });
+  format24.addEventListener('change', ()=>{ prefs.format24 = format24.checked; save(); tick(); });
+  showSec.addEventListener('change', ()=>{
+    prefs.showSec = showSec.checked; save();
+    updateSecondsVisibility(); updateDigitalSecondsVisibility(); tick();
+  });
+  showDate.addEventListener('change', ()=>{ prefs.showDate = showDate.checked; save(); tick(); });
+  showWeekday.addEventListener('change', ()=>{ prefs.showWeekday = showWeekday.checked; save(); tick(); });
+  cardColor.addEventListener('input', ()=>{ prefs.card = cardColor.value; applyCardColor(prefs.card); save(); });
+  digitColor.addEventListener('input', ()=>{ prefs.digitColor = digitColor.value; applyDigitColor(prefs.digitColor); save(); });
+  labelSize.addEventListener('change', ()=>{ prefs.labelSize = labelSize.value; widget.style.setProperty('--label-size', prefs.labelSize); save(); });
+  labelColor.addEventListener('input', ()=>{ prefs.labelColor = labelColor.value; widget.style.setProperty('--label-color', prefs.labelColor); save(); });
+
+  applyCardColor(prefs.card || '#1c1c1c');
+  applyDigitColor(prefs.digitColor || '#e8e4dc');
+  if(typeof prefs.format24 === 'boolean') format24.checked = prefs.format24;
+  if(typeof prefs.showSec === 'boolean') showSec.checked = prefs.showSec;
+  if(typeof prefs.showWeekday === 'boolean') showWeekday.checked = prefs.showWeekday;
+  if(typeof prefs.showDate === 'boolean') showDate.checked = prefs.showDate;
+  if(prefs.labelSize){ labelSize.value = prefs.labelSize; widget.style.setProperty('--label-size', prefs.labelSize); }
+  if(prefs.labelColor){ labelColor.value = prefs.labelColor; widget.style.setProperty('--label-color', prefs.labelColor); }
+
+  buildFlip();
+  buildDigital();
+  updateSecondsVisibility();
+  updateDigitalSecondsVisibility();
+  applyStyleMode();
+  detectTimezone();
+  tick();
+  setInterval(tick, 1000);
+})();
+</script>
+
+</body>
+</html>
